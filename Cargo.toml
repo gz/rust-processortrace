@@ -1,0 +1,24 @@
+[package]
+name = "processortrace"
+version = "0.1.0"
+authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
+description = "Rust library to set-up Intel processor trace for getting raw trace data."
+
+repository = "https://github.com/gz/processor-trace"
+documentation = "http://docs.rs/processor-trace"
+readme = "README.md"
+keywords = ["ia32", "os", "amd64", "x86", "processor", "trace", "tracing"]
+license = "MIT"
+
+[dependencies]
+x86 = "0.11"
+driverkit = "0.2"
+log = "0.4"
+rlibc = "1.0.0"
+
+[dev-dependencies]
+env_logger = "0.5.10"
+libc = "0.2"
+byteorder = "*"
+nix = "*"
+rand = "*"
