@@ -7,7 +7,7 @@ description = "Rust library to set-up Intel processor trace for getting raw trac
 repository = "https://github.com/gz/processor-trace"
 documentation = "http://docs.rs/processortrace"
 readme = "README.md"
-keywords = ["ia32", "os", "amd64", "x86", "processor", "trace", "tracing"]
+keywords = ["x86-64", "x86", "processor", "trace", "hardware"]
 license = "MIT"
 
 [dependencies]
