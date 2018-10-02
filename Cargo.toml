@@ -1,4 +1,5 @@
-[package]
+[
+ackage]
 name = "processortrace"
 version = "0.0.1"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
@@ -19,6 +20,4 @@ rlibc = "1.0.0"
 [dev-dependencies]
 env_logger = "0.5.10"
 libc = "0.2"
-byteorder = "*"
-nix = "*"
-rand = "*"
+byteorder = "1.2"
