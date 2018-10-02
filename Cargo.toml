@@ -5,7 +5,7 @@ authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 description = "Rust library to set-up Intel processor trace for getting raw trace data."
 
 repository = "https://github.com/gz/processor-trace"
-documentation = "http://docs.rs/processor-trace"
+documentation = "http://docs.rs/processortrace"
 readme = "README.md"
 keywords = ["ia32", "os", "amd64", "x86", "processor", "trace", "tracing"]
 license = "MIT"

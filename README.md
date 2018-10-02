@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/gz/rust-processortrace.svg?branch=master)](https://travis-ci.org/gz/rust-processortrace)
+[![Build Status](https://travis-ci.org/gz/processor-trace.svg?branch=master)](https://travis-ci.org/gz/processor-trace)
 
 # Processor Trace
 
