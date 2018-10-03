@@ -1,24 +1,26 @@
-#![feature(test)]
+#![feature(test, alloc)]
 #![no_std]
-extern crate driverkit;
-extern crate rlibc;
-extern crate x86;
+extern crate alloc;
 
 #[macro_use]
 extern crate log;
+extern crate rlibc;
+#[macro_use(assert_matches)]
+extern crate matches;
 
-#[cfg(test)]
+extern crate driverkit;
+extern crate x86;
+
+#[cfg(any(test, target_family = "unix"))]
 #[macro_use]
 extern crate std;
-#[cfg(test)]
-extern crate byteorder;
+
 #[cfg(test)]
 extern crate env_logger;
-#[cfg(test)]
+#[cfg(any(test, target_family = "unix"))]
 extern crate libc;
 #[cfg(test)]
 extern crate nix;
-
 #[cfg(test)]
 extern crate test;
 
@@ -26,7 +28,12 @@ extern crate test;
 mod tests;
 
 use driverkit::mem::DevMem;
-use driverkit::{DriverControl, MsrInterface};
+use driverkit::{DriverControl, DriverState, MsrInterface};
+
+#[cfg(target_family = "unix")]
+mod unix;
+#[cfg(target_family = "unix")]
+pub use unix::TraceDump;
 
 use x86::msr::{
     MSR_IA32_ADDR0_END, MSR_IA32_ADDR0_START, MSR_IA32_ADDR1_END, MSR_IA32_ADDR1_START,
@@ -74,6 +81,10 @@ const ADDR3_MASK: u64 = 0xf << ADDR3_SHIFT;
 /// MSR_IA32_RTIT_STATUS Error bit
 const PT_ERROR: u64 = bit!(4);
 
+trait TraceDumpControl {
+    fn save(&self, filename: &str);
+}
+
 #[derive(Debug, Default)]
 struct PTInfo {
     has_topa: bool,
@@ -115,12 +126,8 @@ pub enum FilterConfig {
     TraceStop(u64, u64),
 }
 
-pub struct ProcessorTraceController<'a> {
-    running: bool,
-    current_offset: u32,
-    buffer: DevMem,
-    msr_interface: &'a mut MsrInterface,
-
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub struct TraceControllerSettings {
     /// Don't enable branch tracing (if supported)
     pub disable_branch: bool,
 
@@ -161,8 +168,18 @@ pub struct ProcessorTraceController<'a> {
     pub addr3_cfg: FilterConfig,
 }
 
+pub struct ProcessorTraceController<'a> {
+    state: DriverState,
+    running: bool,
+    current_offset: u32,
+    buffer: DevMem,
+    msr_interface: &'a mut MsrInterface,
+    settings: TraceControllerSettings,
+}
+
 impl<'a> DriverControl for ProcessorTraceController<'a> {
     fn attach(&mut self) {
+        assert!(self.state == DriverState::Initialized || self.state == DriverState::Detached);
         unsafe {
             let ctl = self.msr_interface.read(MSR_IA32_RTIT_CTL);
             if ctl & TRACE_EN > 0 {
@@ -174,26 +191,38 @@ impl<'a> DriverControl for ProcessorTraceController<'a> {
         unsafe {
             self.msr_interface.write(MSR_IA32_RTIT_STATUS, 0);
         }
+
+        self.set_state(DriverState::Attached(0));
     }
 
-    fn set_sleep_level(&mut self, _level: usize) {}
-
     fn detach(&mut self) {
+        assert_matches!(self.state(), DriverState::Attached(_));
+        self.set_state(DriverState::Detached);
+
         self.stop();
         unsafe {
             self.msr_interface.write(MSR_IA32_RTIT_OUTPUT_MASK_PTRS, 0);
         }
     }
+
+    fn state(&self) -> DriverState {
+        self.state
+    }
+
+    fn set_state(&mut self, state: DriverState) {
+        self.state = state;
+    }
+
+    fn destroy(mut self) {
+        assert_matches!(self.state(), DriverState::Attached(_));
+        self.detach();
+        self.set_state(DriverState::Destroyed);
+    }
 }
 
 impl<'a> ProcessorTraceController<'a> {
     pub fn new(msr_interface: &'a mut MsrInterface) -> ProcessorTraceController<'a> {
-        ProcessorTraceController {
-            running: false,
-            current_offset: 0,
-            buffer: DevMem::alloc(1024 * 1024 * 2).unwrap(),
-            msr_interface: msr_interface,
-
+        let settings = TraceControllerSettings {
             disable_branch: false,
             user: true,
             kernel: true,
@@ -207,6 +236,15 @@ impl<'a> ProcessorTraceController<'a> {
             addr1_cfg: FilterConfig::Off,
             addr2_cfg: FilterConfig::Off,
             addr3_cfg: FilterConfig::Off,
+        };
+
+        ProcessorTraceController {
+            state: DriverState::Uninitialized,
+            running: false,
+            current_offset: 0,
+            buffer: DevMem::alloc(1024 * 1024 * 2).unwrap(),
+            msr_interface: msr_interface,
+            settings: settings,
         }
     }
 
@@ -222,7 +260,7 @@ impl<'a> ProcessorTraceController<'a> {
             }
 
             // Clear on start and trace was disabled
-            if self.clear_on_start && !(rtit_ctl & TRACE_EN > 0) {
+            if self.settings.clear_on_start && !(rtit_ctl & TRACE_EN > 0) {
                 rlibc::memset(self.buffer.as_mut_ptr(), 0, self.buffer.len());
                 self.install_buffer_mask();
                 self.msr_interface.write(MSR_IA32_RTIT_STATUS, 0);
@@ -250,63 +288,69 @@ impl<'a> ProcessorTraceController<'a> {
             // Start tracing
             rtit_ctl |= TRACE_EN;
 
-            if !self.disable_branch {
+            if !self.settings.disable_branch {
                 rtit_ctl |= BRANCH_EN;
             }
 
-            if self.tsc_en {
+            if self.settings.tsc_en {
                 rtit_ctl |= TSC_EN;
             }
 
-            if self.kernel {
+            if self.settings.kernel {
                 rtit_ctl |= CTL_OS;
             }
 
-            if self.user {
+            if self.settings.user {
                 rtit_ctl |= CTL_USER;
             }
 
-            if self.dis_retc {
+            if self.settings.dis_retc {
                 rtit_ctl |= DIS_RETC;
             }
 
-            if self.mtc_freq > 0 && ((1 << (self.mtc_freq - 1)) & ptinfo.mtc_freq_mask) > 0 {
-                rtit_ctl |= ((self.mtc_freq - 1) << MTC_SHIFT) | MTC_EN;
+            if self.settings.mtc_freq > 0
+                && ((1 << (self.settings.mtc_freq - 1)) & ptinfo.mtc_freq_mask) > 0
+            {
+                rtit_ctl |= ((self.settings.mtc_freq - 1) << MTC_SHIFT) | MTC_EN;
             }
 
-            if self.cyc_thresh > 0 && ((1 << (self.cyc_thresh - 1)) & ptinfo.cyc_thresh_mask) > 0 {
-                rtit_ctl |= ((self.cyc_thresh - 1) << CYC_SHIFT) | CYC_EN;
+            if self.settings.cyc_thresh > 0
+                && ((1 << (self.settings.cyc_thresh - 1)) & ptinfo.cyc_thresh_mask) > 0
+            {
+                rtit_ctl |= ((self.settings.cyc_thresh - 1) << CYC_SHIFT) | CYC_EN;
             }
 
-            if self.psb_freq > 0 && ((1 << (self.psb_freq - 1)) & ptinfo.psb_freq_mask) > 0 {
-                rtit_ctl |= (self.psb_freq - 1) << PSB_SHIFT;
+            if self.settings.psb_freq > 0
+                && ((1 << (self.settings.psb_freq - 1)) & ptinfo.psb_freq_mask) > 0
+            {
+                rtit_ctl |= (self.settings.psb_freq - 1) << PSB_SHIFT;
             }
 
             for &(i, cfg, shift, addr_start_msr, addr_end_msr) in [
                 (
                     0u8,
-                    self.addr0_cfg,
+                    self.settings.addr0_cfg,
                     ADDR0_SHIFT,
                     MSR_IA32_ADDR0_START,
                     MSR_IA32_ADDR0_END,
                 ),
                 (
                     1u8,
-                    self.addr1_cfg,
+                    self.settings.addr1_cfg,
                     ADDR1_SHIFT,
                     MSR_IA32_ADDR1_START,
                     MSR_IA32_ADDR1_END,
                 ),
                 (
                     2u8,
-                    self.addr2_cfg,
+                    self.settings.addr2_cfg,
                     ADDR2_SHIFT,
                     MSR_IA32_ADDR2_START,
                     MSR_IA32_ADDR2_END,
                 ),
                 (
                     3u8,
-                    self.addr3_cfg,
+                    self.settings.addr3_cfg,
                     ADDR3_SHIFT,
                     MSR_IA32_ADDR3_START,
                     MSR_IA32_ADDR3_END,
@@ -408,5 +452,17 @@ impl<'a> ProcessorTraceController<'a> {
                 (self.buffer.len() - 1) as u64,
             )
         }
+    }
+
+    pub fn trace<F>(&mut self, func: F) -> TraceDump
+    where
+        F: Fn(),
+    {
+        assert_matches!(self.state(), DriverState::Attached(_));
+        self.start();
+        func();
+        self.stop();
+
+        TraceDump::new(self.buffer.as_slice(), self.settings)
     }
 }
