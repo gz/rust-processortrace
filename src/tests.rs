@@ -47,10 +47,13 @@ fn trace_fn() {
     controller.attach();
 
     let dump: TraceDump = controller.trace(|| {
+        let mut a = 0;
         for i in 0..200 {
-            println!("i = {}", i);
+            foo(i);
         }
+        println!("a = {}", a);
     });
+
     dump.save("trace_fn");
 
     controller.destroy();

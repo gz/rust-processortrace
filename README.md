@@ -3,3 +3,7 @@
 # Processor Trace
 
 Use Intel PT to trace your rust program (work in progess).
+
+
+python decode.py trace_fn deadbeef > trace_fn.sideband
+./sptdecode -s ./trace_fn.sideband -p trace_fn.ptdump

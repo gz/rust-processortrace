@@ -33,8 +33,36 @@ impl TraceDumpControl for TraceDump {
             .unwrap();
 
         let mut file = File::create(format!("{}.ptinfo", filename)).unwrap();
-        file.write_all(format!("{:?}\n", PTInfo::new()).as_bytes())
-            .unwrap();
+        let cpuid = x86::cpuid::CpuId::new();
+        let family_id = cpuid.get_feature_info().map_or(0, |s| s.family_id());
+        let model_id = cpuid.get_feature_info().map_or(0, |s| s.model_id());
+        let stepping = cpuid.get_feature_info().map_or(0, |s| s.stepping_id());
+        let nom_freq = cpuid
+            .get_processor_frequency_info()
+            .map_or(0, |s| s.processor_max_frequency() / 100);
+        let tsc_ratio = cpuid
+            .get_tsc_info()
+            .map_or((0, 0), |s| (s.numerator(), s.denominator()));
+
+        file.write_all(
+            format!(
+                "meta family {}
+meta model {}
+meta stepping {}
+meta mtc_freq {}
+meta nom_freq {}
+meta tsc_ratio {} {}\n",
+                family_id,
+                model_id,
+                stepping,
+                self.settings.mtc_freq,
+                nom_freq,
+                tsc_ratio.1,
+                tsc_ratio.0
+            )
+            .as_bytes(),
+        )
+        .unwrap();
 
         let pid = unsafe { libc::getpid() };
         Command::new("cp")
