@@ -22,7 +22,7 @@ libc = "0.2"
 nix = "0.*"
 #xed-sys = "0.1.1"
 
-[dev-dependencies]
+[target.'cfg(unix)'.dev-dependencies]
 env_logger = "0.5.10"
 libc = "0.2"
 byteorder = "1.2"
