@@ -356,7 +356,7 @@ impl<'a> ProcessorTraceController<'a> {
                     MSR_IA32_ADDR3_END,
                 ),
             ]
-                .iter()
+            .iter()
             {
                 if ptinfo.addr_range_num > i {
                     match cfg {
