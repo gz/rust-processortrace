@@ -1,6 +1,6 @@
 [package]
 name = "processortrace"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 description = "Rust library to set-up Intel processor trace for getting raw trace data."
 
@@ -11,8 +11,8 @@ keywords = ["x86-64", "x86", "processor", "trace", "hardware"]
 license = "MIT"
 
 [dependencies]
-x86 = "0.19"
-driverkit = { path = "../driverkit" }
+x86 = "0.32"
+driverkit = "0.3"
 log = "0.4"
 rlibc = "1.0.0"
 matches = "0.1.8"
