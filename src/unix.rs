@@ -5,7 +5,7 @@ use std::process::Command;
 use libc;
 
 use alloc::vec::Vec;
-use {PTInfo, TraceControllerSettings, TraceDumpControl};
+use {TraceControllerSettings, TraceDumpControl};
 
 pub struct TraceDump {
     pub data: Vec<u8>,

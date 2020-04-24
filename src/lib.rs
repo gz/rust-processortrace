@@ -1,4 +1,4 @@
-#![feature(test, alloc)]
+#![feature(test)]
 #![no_std]
 extern crate alloc;
 
@@ -173,7 +173,7 @@ pub struct ProcessorTraceController<'a> {
     running: bool,
     current_offset: u32,
     buffer: DevMem,
-    msr_interface: &'a mut MsrInterface,
+    msr_interface: &'a mut dyn MsrInterface,
     settings: TraceControllerSettings,
 }
 
@@ -221,7 +221,7 @@ impl<'a> DriverControl for ProcessorTraceController<'a> {
 }
 
 impl<'a> ProcessorTraceController<'a> {
-    pub fn new(msr_interface: &'a mut MsrInterface) -> ProcessorTraceController<'a> {
+    pub fn new(msr_interface: &'a mut dyn MsrInterface) -> ProcessorTraceController<'a> {
         let settings = TraceControllerSettings {
             disable_branch: false,
             user: true,
